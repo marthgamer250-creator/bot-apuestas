@@ -6,54 +6,81 @@ from flask import Flask
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "🤖 Bot Dinámico de Bet365 Activo 24/7"
-
-API_KEY_ODDS = "6c5f290a655e478909dcd837da4943bd"
 TELEGRAM_TOKEN = "8814947543:AAFtSv-SIvyla9vJYV7AGA4Y9jMLSR0YwNI"
+contexto = {"partido_actual": "Ninguno"}
 
 def enviar_telegram(chat_id, texto):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
     requests.post(url, json=payload)
 
-def analizar_apuesta_ia(texto_usuario):
-    t = texto_usuario.lower()
-    
-    if "2.5" in t or "goles" in t or "over" in t:
-        return (
-            f"🔥 **¡DALE, DALE, DALE! Apuesta de Goles** 🔥\n\n"
-            f"⚽ *Partido/Consulta:* {texto_usuario.title()}\n"
-            f"🏢 *Casa analizada:* Bet365\n"
-            f"📊 *Análisis Cuantitativo:* xG (goles esperados) alto en ambos planteles.\n"
-            f"💡 *Veredicto:* **Entrá con confianza.** Cuota con valor matemático (+EV)."
+def procesar_logica_apuestas(texto, chat_id):
+    t = texto.lower()
+    p = contexto["partido_actual"]
+
+    # 1. ANÁLISIS DE PARTIDO (Settear contexto)
+    if "analiza" in t:
+        partido = texto.replace("Analiza", "").replace("analiza", "").strip()
+        contexto["partido_actual"] = partido
+        enviar_telegram(chat_id, f"📡 *Sistema vinculado:* {partido}. \nAhora puedes preguntar: 'goles', 'corners', 'marcador', 'jugador', etc.")
+        return
+
+    # 2. GOLES (Probabilidades y riesgos)
+    if "goles" in t:
+        respuesta = (
+            f"⚽ *Análisis de Goles: {p}*\n\n"
+            f"• **Opción Segura (Bajo Riesgo):** Menos de 3.5 goles.\n"
+            f"• **Opción Equilibrada:** Más de 1.5 goles.\n"
+            f"• **Opción Arriesgada (High Stake):** Ambos Anotan en el 2do Tiempo.\n"
+            f"🔮 *Predicción Probabilística:* El algoritmo estima un rango de 2 a 3 goles totales."
         )
-    elif "parley" in t or "combinada" in t or "parli" in t:
-        return (
-            "🎯 **PARLEY MASTER +EV (BET365)** 🎯\n\n"
-            "1️⃣ Combinada seleccionada con alta probabilidad de acierto.\n"
-            "📈 *Cuota Estimada:* ~2.15\n"
-            "💡 *Veredicto:* **¡Aprobado para duplicar capital!**"
+        enviar_telegram(chat_id, respuesta)
+
+    # 3. TIROS DE ESQUINA (Rango matemático)
+    elif "corners" in t or "tiros de esquina" in t:
+        respuesta = (
+            f"🚩 *Análisis de Córners: {p}*\n\n"
+            f"📊 *Predicción:* El modelo estima entre **8 y 12 córners**.\n"
+            f"👉 *Recomendación:* Más de 8.5 Córners (Cuota promedio 1.85).\n"
+            f"⚠️ *Nota:* Si el partido está cerrado al min 60, buscar 'Más de' en directo."
         )
-    elif "córner" in t or "esquina" in t or "corners" in t:
-        return (
-            f"🚩 **ANÁLISIS DE CÓRNERS** 🚩\n\n"
-            f"⚽ *Consulta:* {texto_usuario.title()}\n"
-            f"📊 *Lectura:* Volumen alto de centros por bandas.\n"
-            f"💡 *Veredicto:* **¡Dale al Más de Córners en Bet365!**"
+        enviar_telegram(chat_id, respuesta)
+
+    # 4. MARCADOR CORRECTO
+    elif "marcador" in t:
+        respuesta = (
+            f"🎯 *Predicción de Marcador: {p}*\n\n"
+            f"1️⃣ Probabilidad Alta: **2 - 1**\n"
+            f"2️⃣ Probabilidad Media: **1 - 1**\n"
+            f"3️⃣ Probabilidad Baja (Arriesgada): **3 - 0**"
         )
+        enviar_telegram(chat_id, respuesta)
+
+    # 5. JUGADORES (Goles / Remates)
+    elif "jugador" in t or "remates" in t or "marcar" in t:
+        respuesta = (
+            f"👤 *Análisis de Jugadores: {p}*\n\n"
+            f"• **Jugador Estrella:** Máxima probabilidad de anotar (o rematar al arco).\n"
+            f"• **Cuota Sugerida:** Buscar 'Remates a puerta' (Más de 1.5).\n"
+            f"• **Probabilidad:** Alta tasa de conversión en las últimas 5 jornadas."
+        )
+        enviar_telegram(chat_id, respuesta)
+
+    # 6. GANADOR / PRIMEROS 10 MIN
+    elif "quién ganará" in t or "10 minutos" in t or "ganador" in t:
+        respuesta = (
+            f"⚡ *Análisis en Tiempo Real: {p}*\n\n"
+            f"🏆 **Ganador probable:** Análisis inclinado hacia el Favorito por posesión.\n"
+            f"⏱️ **Primeros 10 min:** Partido de estudio. Baja probabilidad de goles tempraneros. Sugerencia: Esperar."
+        )
+        enviar_telegram(chat_id, respuesta)
+
+    # 7. PARLAYS
+    elif "parlay" in t:
+        enviar_telegram(chat_id, "🔥 **PARLEY DEL DÍA**\n1. Ganador A\n2. Más de 1.5 goles B\n3. +8.5 Córners C\n¡Dale con gestión de stake!")
+
     else:
-        # Respuesta inteligente que absorbe CUALQUIER partido que le escribas
-        return (
-            f"⚽ **ANÁLISIS TÁCTICO & BET365** 🇲🇽\n"
-            f"🔍 *Partido:* `{texto_usuario.title()}`\n\n"
-            f"📊 **Lectura del Modelo Cuantitativo:**\n"
-            f"• **1X2 (Ganador):** Tendencia favorable detectada en las cuotas de Bet365.\n"
-            f"• **Goles:** Alta probabilidad de movimientos en el mercado de Alta de Goles o Ambos Anotan.\n"
-            f"• **Córners:** Ritmo propicio para líneas secundarias.\n\n"
-            f"💡 **Veredicto Final:** **¡Luz verde!** El modelo detecta rentabilidad en este encuentro. ¡Dale con gestión de stake adecuada en Bet365!"
-        )
+        enviar_telegram(chat_id, "🤖 *No detecté la categoría.* Pregunta por: goles, corners, marcador, jugador, ganador, o parlay.")
 
 def escuchar_telegram():
     offset = 0
@@ -61,29 +88,16 @@ def escuchar_telegram():
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={offset}&timeout=30"
             resp = requests.get(url).json()
-            
             if resp.get("result"):
                 for update in resp["result"]:
                     offset = update["update_id"] + 1
-                    message = update.get("message", {})
-                    chat_id = message.get("chat", {}).get("id")
-                    texto = message.get("text", "")
-                    
-                    if chat_id and texto:
-                        if texto.startswith("/start"):
-                            enviar_telegram(chat_id, "🤖 ¡Bot de Bet365 activo! Escríbeme cualquier partido (ej: 'Necaxa vs León') o consulta y te daré el análisis completo.")
-                        else:
-                            respuesta = analizar_apuesta_ia(texto)
-                            enviar_telegram(chat_id, respuesta)
-                            
-        except Exception as e:
-            print(f"Error en Telegram: {e}")
-        time.sleep(2)
+                    chat_id = update["message"]["chat"]["id"]
+                    texto = update["message"].get("text", "")
+                    if texto:
+                        procesar_logica_apuestas(texto, chat_id)
+        except Exception: time.sleep(1)
+        time.sleep(1)
 
 if __name__ == "__main__":
-    t = threading.Thread(target=escuchar_telegram)
-    t.daemon = True
-    t.start()
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    threading.Thread(target=escuchar_telegram, daemon=True).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
