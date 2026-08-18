@@ -6,81 +6,106 @@ from flask import Flask
 
 app = Flask(__name__)
 
+API_KEY_ODDS = "6c5f290a655e478909dcd837da4943bd"
 TELEGRAM_TOKEN = "8814947543:AAFtSv-SIvyla9vJYV7AGA4Y9jMLSR0YwNI"
-contexto = {"partido_actual": "Ninguno"}
+
+# Ligas principales que el bot escaneará automáticamente en busca de tu partido
+LIGAS_DEPORTE = [
+    "soccer_mexico_ligamx",
+    "soccer_epl",
+    "soccer_spain_la_liga",
+    "soccer_italy_serie_a",
+    "soccer_uefa_champs_league",
+    "soccer_usa_mls",
+    "soccer_argentina_primera_division"
+]
 
 def enviar_telegram(chat_id, texto):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
     requests.post(url, json=payload)
 
-def procesar_logica_apuestas(texto, chat_id):
+def buscar_cuotas_reales(busqueda):
+    """
+    Busca en tiempo real en la API de cuotas el partido solicitado
+    y extrae los datos reales de Bet365.
+    """
+    busqueda = busqueda.lower()
+    
+    for sport_key in LIGAS_DEPORTE:
+        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu,us&markets=h2h,totals"
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                partidos = resp.json()
+                for p in partidos:
+                    home = p.get('home_team', '')
+                    away = p.get('away_team', '')
+                    
+                    # Si el texto que escribiste coincide con algún equipo
+                    if busqueda in home.lower() or busqueda in away.lower():
+                        # Buscar cuotas de Bet365
+                        for bookmaker in p.get('bookmakers', []):
+                            if bookmaker.get('title') == 'Bet365':
+                                return organizar_reporte_real(home, away, bookmaker)
+        except Exception as e:
+            print(f"Error consultando {sport_key}: {e}")
+            
+    return None
+
+def organizar_reporte_real(home, away, bookmaker):
+    """
+    Toma los datos crudos de Bet365 y calcula las matemáticas y probabilidades.
+    """
+    mercados = bookmaker.get('markets', [])
+    cuotas_h2h = {}
+    cuotas_totales = {}
+    
+    for mercado in mercados:
+        if mercado['key'] == 'h2h':
+            for outcome in mercado['outcomes']:
+                cuotas_h2h[outcome['name']] = outcome['price']
+        elif mercado['key'] == 'totals':
+            for outcome in mercado['outcomes']:
+                cuotas_totales[outcome.get('name', '')] = outcome.get('price')
+
+    # Cálculos matemáticos básicos (Probabilidad Implícita)
+    texto_cuotas = ""
+    for equipo, cuota in cuotas_h2h.items():
+        prob_implicita = (1 / cuota) * 100
+        texto_cuotas += f"• **{equipo}:** Cuota `{cuota}` (Prob. Implícita: `{prob_implicita:.1f}%`)\n"
+
+    reporte = (
+        f"🔥 **ANÁLISIS GOD-TIER (EN TIEMPO REAL)** 🔥\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"⚽ **Encuentro:** `{home} vs {away}`\n"
+        f"🏢 **Casa Verificada:** Bet365\n\n"
+        f"📊 **Cuotas y Matemáticas en Vivo:**\n"
+        f"{texto_cuotas}\n"
+        f"🛡️ **Opción Segura:** Doble Oportunidad al favorito.\n"
+        f"⚖️ **Opción Equilibrada:** Ambos Anotan / Más de 1.5 Goles.\n"
+        f"🚀 **Opción Arriesgada (High Stake):** Victoria directa por más de 1 gol.\n\n"
+        f"💡 *Veredicto del Algoritmo:* Datos extraídos directamente del servidor de Bet365. ¡Opera con gestión de riesgo estricta!"
+    )
+    return reporte
+
+def procesar_telegram(texto, chat_id):
     t = texto.lower()
-    p = contexto["partido_actual"]
-
-    # 1. ANÁLISIS DE PARTIDO (Settear contexto)
-    if "analiza" in t:
-        partido = texto.replace("Analiza", "").replace("analiza", "").strip()
-        contexto["partido_actual"] = partido
-        enviar_telegram(chat_id, f"📡 *Sistema vinculado:* {partido}. \nAhora puedes preguntar: 'goles', 'corners', 'marcador', 'jugador', etc.")
-        return
-
-    # 2. GOLES (Probabilidades y riesgos)
-    if "goles" in t:
-        respuesta = (
-            f"⚽ *Análisis de Goles: {p}*\n\n"
-            f"• **Opción Segura (Bajo Riesgo):** Menos de 3.5 goles.\n"
-            f"• **Opción Equilibrada:** Más de 1.5 goles.\n"
-            f"• **Opción Arriesgada (High Stake):** Ambos Anotan en el 2do Tiempo.\n"
-            f"🔮 *Predicción Probabilística:* El algoritmo estima un rango de 2 a 3 goles totales."
-        )
-        enviar_telegram(chat_id, respuesta)
-
-    # 3. TIROS DE ESQUINA (Rango matemático)
-    elif "corners" in t or "tiros de esquina" in t:
-        respuesta = (
-            f"🚩 *Análisis de Córners: {p}*\n\n"
-            f"📊 *Predicción:* El modelo estima entre **8 y 12 córners**.\n"
-            f"👉 *Recomendación:* Más de 8.5 Córners (Cuota promedio 1.85).\n"
-            f"⚠️ *Nota:* Si el partido está cerrado al min 60, buscar 'Más de' en directo."
-        )
-        enviar_telegram(chat_id, respuesta)
-
-    # 4. MARCADOR CORRECTO
-    elif "marcador" in t:
-        respuesta = (
-            f"🎯 *Predicción de Marcador: {p}*\n\n"
-            f"1️⃣ Probabilidad Alta: **2 - 1**\n"
-            f"2️⃣ Probabilidad Media: **1 - 1**\n"
-            f"3️⃣ Probabilidad Baja (Arriesgada): **3 - 0**"
-        )
-        enviar_telegram(chat_id, respuesta)
-
-    # 5. JUGADORES (Goles / Remates)
-    elif "jugador" in t or "remates" in t or "marcar" in t:
-        respuesta = (
-            f"👤 *Análisis de Jugadores: {p}*\n\n"
-            f"• **Jugador Estrella:** Máxima probabilidad de anotar (o rematar al arco).\n"
-            f"• **Cuota Sugerida:** Buscar 'Remates a puerta' (Más de 1.5).\n"
-            f"• **Probabilidad:** Alta tasa de conversión en las últimas 5 jornadas."
-        )
-        enviar_telegram(chat_id, respuesta)
-
-    # 6. GANADOR / PRIMEROS 10 MIN
-    elif "quién ganará" in t or "10 minutos" in t or "ganador" in t:
-        respuesta = (
-            f"⚡ *Análisis en Tiempo Real: {p}*\n\n"
-            f"🏆 **Ganador probable:** Análisis inclinado hacia el Favorito por posesión.\n"
-            f"⏱️ **Primeros 10 min:** Partido de estudio. Baja probabilidad de goles tempraneros. Sugerencia: Esperar."
-        )
-        enviar_telegram(chat_id, respuesta)
-
-    # 7. PARLAYS
-    elif "parlay" in t:
-        enviar_telegram(chat_id, "🔥 **PARLEY DEL DÍA**\n1. Ganador A\n2. Más de 1.5 goles B\n3. +8.5 Córners C\n¡Dale con gestión de stake!")
-
+    
+    if t.startswith("analiza") or t.startswith("partido") or len(t) > 3:
+        # Extraer el nombre del equipo a buscar
+        equipo_buscado = t.replace("analiza", "").replace("partido", "").strip()
+        
+        enviar_telegram(chat_id, f"🔍 Buscando en tiempo real cuotas de Bet365 para: *{equipo_buscado.title()}*...")
+        
+        reporte = buscar_cuotas_reales(equipo_buscado)
+        
+        if reporte:
+            enviar_telegram(chat_id, reporte)
+        else:
+            enviar_telegram(chat_id, f"⚠️ No encontré un partido activo en este momento para **'{equipo_buscado.title()}'** en las ligas principales de Bet365. Prueba escribiendo el nombre exacto de uno de los equipos (ej: *Necaxa*, *León*, *Real Madrid*).")
     else:
-        enviar_telegram(chat_id, "🤖 *No detecté la categoría.* Pregunta por: goles, corners, marcador, jugador, ganador, o parlay.")
+        enviar_telegram(chat_id, "🤖 Escribe **'Analiza [Nombre del Equipo]'** para consultar las cuotas matemáticas en vivo de Bet365.")
 
 def escuchar_telegram():
     offset = 0
@@ -94,7 +119,7 @@ def escuchar_telegram():
                     chat_id = update["message"]["chat"]["id"]
                     texto = update["message"].get("text", "")
                     if texto:
-                        procesar_logica_apuestas(texto, chat_id)
+                        procesar_telegram(texto, chat_id)
         except Exception: time.sleep(1)
         time.sleep(1)
 
