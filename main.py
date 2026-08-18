@@ -39,41 +39,44 @@ def radar_automatico():
                         home = partido['home_team']
                         away = partido['away_team']
                         for bookmaker in partido.get('bookmakers', []):
-                            casa = bookmaker['title']
-                            for market in bookmaker.get('markets', []):
-                                if market['key'] == 'h2h':
-                                    for outcome in market['outcomes']:
-                                        cuota = outcome['price']
-                                        equipo = outcome['name']
-                                        
-                                        prob_implicita = 1 / cuota
-                                        prob_modelo = prob_implicita + 0.05
-                                        ev = (prob_modelo * cuota) - 1
-                                        
-                                        if ev >= 0.035:
-                                            stake_kelly = min(1.5, ((cuota - 1) * prob_modelo - (1 - prob_modelo)) / (cuota - 1) * 100 * 0.25)
-                                            monto_apuesta = (bankroll * stake_kelly) / 100.0
+                            
+                            # FILTRO 1: Exclusivo para Bet365
+                            if bookmaker.get('title') == 'Bet365':
+                                casa = bookmaker['title']
+                                for market in bookmaker.get('markets', []):
+                                    if market['key'] == 'h2h':
+                                        for outcome in market['outcomes']:
+                                            cuota = outcome['price']
+                                            equipo = outcome['name']
                                             
-                                            alerta = (
-                                                f"🚨 **¡ALERTA DE VALOR / +EV!** 🚨\n\n"
-                                                f"🏢 *Casa:* {casa}\n"
-                                                f"⚽ *Partido:* {home} vs {away}\n"
-                                                f"🎯 *Selección:* {equipo}\n"
-                                                f"📈 *Cuota:* {cuota} | **EV:** +{ev*100:.2f}%\n"
-                                                f"💰 *Stake Sugerido:* ${monto_apuesta:.2f} USD"
-                                            )
-                                            enviar_telegram(chat_id, alerta)
-                                            time.sleep(1)
+                                            prob_implicita = 1 / cuota
+                                            prob_modelo = prob_implicita + 0.05
+                                            ev = (prob_modelo * cuota) - 1
+                                            
+                                            # FILTRO 2: Exigencia alta (EV >= 6.5%) para evitar spam y asegurar calidad
+                                            if ev >= 0.065:
+                                                stake_kelly = min(1.5, ((cuota - 1) * prob_modelo - (1 - prob_modelo)) / (cuota - 1) * 100 * 0.25)
+                                                monto_apuesta = (bankroll * stake_kelly) / 100.0
+                                                
+                                                alerta = (
+                                                    f"🚨 **¡FALLO DETECTADO EN BET365!** 🚨\n\n"
+                                                    f"⚽ *Partido:* {home} vs {away}\n"
+                                                    f"🎯 *Selección:* {equipo}\n"
+                                                    f"📈 *Cuota:* {cuota} | **EV:** +{ev*100:.2f}%\n"
+                                                    f"💰 *Stake Sugerido:* ${monto_apuesta:.2f} USD"
+                                                )
+                                                enviar_telegram(chat_id, alerta)
+                                                time.sleep(2)
         except Exception as e:
             print(f"Error en el ciclo: {e}")
-        time.sleep(3600) # Vuelve a escanear en 1 hora
+            
+        # Espaciamos la revisión a cada 2 horas para calmar por completo las notificaciones
+        time.sleep(7200)
 
 if __name__ == "__main__":
-    # Arranca el bot en segundo plano
     t = threading.Thread(target=radar_automatico)
     t.daemon = True
     t.start()
     
-    # Inicia el servidor web para que Render cumpla con el plan gratuito
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
